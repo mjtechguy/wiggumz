@@ -490,19 +490,44 @@ execute_claude() {
 setup_tmux() {
     local project_name=$1
     local session_name="ralph-$project_name"
-    
+
     log "INFO" "Setting up tmux session: $session_name"
-    
+
     # Kill existing session if any
+    log "INFO" "Cleaning up any existing session..."
     tmux kill-session -t "$session_name" 2>/dev/null || true
-    
+
     # Create new session with the loop
-    tmux new-session -d -s "$session_name" -c "$REPO_ROOT"
-    
+    log "INFO" "Creating new tmux session: $session_name"
+    if ! tmux new-session -d -s "$session_name" -c "$REPO_ROOT"; then
+        log "ERROR" "Failed to create tmux session!"
+        echo ""
+        echo "Possible issues:"
+        echo "  - tmux is not installed"
+        echo "  - Another session with name '$session_name' is stuck"
+        echo "  - Permission denied for tmux socket"
+        echo ""
+        echo "Try manually:"
+        echo "  tmux kill-session -t $session_name"
+        echo "  tmux new-session -s $session_name"
+        echo ""
+        echo "To list all sessions: tmux list-sessions"
+        exit 1
+    fi
+
+    # Small delay to ensure session is ready
+    sleep 0.2
+
     # Split horizontally
-    tmux split-window -h -t "$session_name" -c "$REPO_ROOT"
-    
+    log "INFO" "Splitting window for monitor..."
+    if ! tmux split-window -h -t "$session_name" -c "$REPO_ROOT"; then
+        log "ERROR" "Failed to split tmux window!"
+        tmux kill-session -t "$session_name" 2>/dev/null || true
+        exit 1
+    fi
+
     # Start monitor in right pane
+    log "INFO" "Starting monitor in right pane..."
     tmux send-keys -t "$session_name:0.1" "$SCRIPT_DIR/monitor.sh $project_name" Enter
     
     # Build command with options (without --monitor to avoid recursion)
@@ -522,14 +547,38 @@ setup_tmux() {
     
     # Start loop in left pane
     tmux send-keys -t "$session_name:0.0" "$start_cmd" Enter
-    
+
     # Select left pane
     tmux select-pane -t "$session_name:0.0"
-    
+
     # Set window title
     tmux rename-window -t "$session_name:0" "Ralph: $project_name"
-    
+
+    # Save session info to a file for reference
+    local project_dir="$SCRIPT_DIR/projects/$project_name"
+    local session_info_file="$project_dir/tmux-session.txt"
+    cat > "$session_info_file" << EOF
+Wiggumz Tmux Session Info
+==========================
+Session Name: $session_name
+Project: $project_name
+Created: $(date)
+
+Working Directory: $REPO_ROOT
+
+Commands:
+  To attach:    tmux attach -t $session_name
+  To detach:    (press Ctrl+B, then D)
+  To kill:      tmux kill-session -t $session_name
+  To list all:  tmux list-sessions
+
+Pane Layout:
+  Left (0.0):  Ralph loop
+  Right (0.1): Monitor
+EOF
+
     log "SUCCESS" "tmux session created!"
+    log "INFO" "Session info saved to: $session_info_file"
     echo ""
     echo "═══════════════════════════════════════════════════════════"
     echo "  tmux Controls"
@@ -542,9 +591,11 @@ setup_tmux() {
     echo "  To reattach:  tmux attach -t $session_name"
     echo "  To kill:      tmux kill-session -t $session_name"
     echo ""
+    echo "  Session info: $session_info_file"
+    echo ""
     echo "═══════════════════════════════════════════════════════════"
     echo ""
-    
+
     # Attach to session
     tmux attach-session -t "$session_name"
     
