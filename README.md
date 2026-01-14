@@ -1,16 +1,45 @@
 # Wiggumz - Autonomous AI Development Loop
 
-Ralph is an autonomous development loop system that uses Claude Code to iteratively implement features from a PRD (Product Requirements Document).
+Wiggumz is an autonomous development loop system that uses Claude Code to iteratively implement features from a PRD (Product Requirements Document). It uses the Ralph loop to continuously refine and implement tasks based on the PRD automatically.
 
 ## Quick Start
 
-Ralph supports three workflows:
+Wiggumz supports three workflows:
 
 | Workflow | Best For | How to Start |
 |----------|----------|--------------|
 | **Manual PRD** | You already have a clear PRD | `./wiggumz/new.sh my-feature` |
 | **Greenfield Interview** | Building something new | `./wiggumz/new.sh my-project --interview` |
 | **Brownfield Interview** | Modifying existing codebase | `./wiggumz/new.sh my-feature --interview -p ../myapp` |
+
+---
+
+## Installation
+
+Clone Wiggumz into your project repository:
+
+```bash
+# Clone into your existing project root
+cd /path/to/your-project
+git clone https://github.com/mjtechguy/ralph.git wiggumz
+
+# Or add as a submodule
+git submodule add https://github.com/mjtechguy/ralph.git wiggumz
+```
+
+**Why clone into your project?** Wiggumz analyzes and works on code in the current directory. By placing it in your project root, it can easily analyze your codebase for brownfield mode and the generated PRD files live alongside your code.
+
+```
+your-project/
+├── src/                 # Your code
+├── package.json        # Your dependencies
+├── wiggumz/            # Wiggumz tools
+│   ├── new.sh
+│   ├── interview.py
+│   ├── start.sh
+│   └── ...
+└── wiggumz-projects/   # Generated PRDs (optional, can be in wiggumz/projects/)
+```
 
 ---
 
