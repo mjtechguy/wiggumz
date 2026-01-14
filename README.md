@@ -145,12 +145,14 @@ python3 ralph/interview.py my-feature -p ../myapp
 
 ```bash
 # Install dependencies
-brew install jq tmux gh  # gh CLI recommended for branch detection
+brew install jq tmux gh uv  # gh CLI recommended for branch detection
 npm install -g @anthropic-ai/claude-code
 
-# Python 3.12+ for interview mode
+# Python 3.12+ for interview mode (handled automatically by uv)
 python3 --version
 ```
+
+**Note:** `uv` is recommended for running `interview.py` but not required. You can also use `python3` directly.
 
 ---
 
@@ -188,18 +190,19 @@ Create a new Ralph project.
 Run interview mode directly (same as `new.sh --interview`).
 
 ```bash
-# Interactive mode selection
-python3 ralph/interview.py myproject
+# Using uv (recommended - auto-manages virtual env)
+uv run interview.py myproject
+uv run interview.py myproject -m brownfield -p ../app
 
-# Force mode
-python3 ralph/interview.py myproject -m brownfield
-python3 ralph/interview.py myproject -m greenfield
+# Using python3 directly
+python3 interview.py myproject
+python3 interview.py myproject -m greenfield
 
 # Specify path and Claude command
-python3 ralph/interview.py myfeature -p ../app -c "glmclaude"
+python3 interview.py myfeature -p ../app -c "glmclaude"
 
 # Custom output directory
-python3 ralph/interview.py myproject -o ./custom-output
+python3 interview.py myproject -o ./custom-output
 ```
 
 | Option | Description |

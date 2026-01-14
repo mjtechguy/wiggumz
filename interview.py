@@ -23,6 +23,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # Add lib directory to path
 lib_dir = Path(__file__).parent / "lib"
