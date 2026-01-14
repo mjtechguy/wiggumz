@@ -21,10 +21,10 @@ Clone Wiggumz into your project repository:
 ```bash
 # Clone into your existing project root
 cd /path/to/your-project
-git clone https://github.com/mjtechguy/ralph.git wiggumz
+git clone https://github.com/mjtechguy/wiggumz.git wiggumz
 
 # Or add as a submodule
-git submodule add https://github.com/mjtechguy/ralph.git wiggumz
+git submodule add https://github.com/mjtechguy/wiggumz.git wiggumz
 ```
 
 **Why clone into your project?** Wiggumz analyzes and works on code in the current directory. By placing it in your project root, it can easily analyze your codebase for brownfield mode and the generated PRD files live alongside your code.
