@@ -49,7 +49,6 @@ from interview_utils import (
     has_uncommitted_changes,
 )
 from interviewer import conduct_interview
-from prd_generator import generate_prd
 
 
 # ============================================================================
@@ -685,22 +684,13 @@ Output a comprehensive BROWNFIELD.md file.
     print("=" * 60)
     print()
 
-    # Step 3: Generate PRD
-    print("Step 3: Generating PRD...")
-    print("-" * 60)
-
-    prd_content = generate_prd(
-        mode=mode,
-        interview_results=interview_results,
-        brownfield_doc=brownfield_doc,
-        target_path=target_path,
-        ralph_dir=Path(__file__).parent
-    )
-
-    # Write PRD
+    # Check if PRD was created by Claude
     prd_path = output_dir / "prd.md"
-    prd_path.write_text(prd_content)
-    print(f"  Wrote: {prd_path}")
+    if prd_path.exists():
+        print(f"  ✓ PRD created: {prd_path}")
+    else:
+        print(f"  ⚠ PRD not found at: {prd_path}")
+        print(f"  Make sure Claude wrote the PRD to the correct location.")
     print()
 
     # Update status.json
@@ -716,7 +706,7 @@ Output a comprehensive BROWNFIELD.md file.
     status_path.write_text(json.dumps(status_json, indent=2) + "\n")
 
     # Auto-commit PRD files if in a git repo
-    if is_git_repo(target_path) and branch_name:
+    if is_git_repo(target_path) and branch_name and prd_path.exists():
         print()
         print("=" * 60)
         print("  Committing PRD files...")
@@ -730,7 +720,7 @@ Output a comprehensive BROWNFIELD.md file.
         repo_name = get_repo_name(target_path)
         repo_owner = get_repo_owner(target_path)
 
-        commit_msg = f"feat: {args.project_name} - Generate PRD via interview.py\n\n"
+        commit_msg = f"feat: {args.project_name} - Generate PRD via interview\n\n"
         commit_msg += f"Mode: {mode}\n"
         if repo_name:
             commit_msg += f"Repo: {repo_owner + '/' if repo_owner else ''}{repo_name}\n"
