@@ -1,4 +1,4 @@
-# Ralph - Autonomous AI Development Loop
+# Wiggumz - Autonomous AI Development Loop
 
 Ralph is an autonomous development loop system that uses Claude Code to iteratively implement features from a PRD (Product Requirements Document).
 
@@ -8,9 +8,9 @@ Ralph supports three workflows:
 
 | Workflow | Best For | How to Start |
 |----------|----------|--------------|
-| **Manual PRD** | You already have a clear PRD | `./ralph/new.sh my-feature` |
-| **Greenfield Interview** | Building something new | `./ralph/new.sh my-project --interview` |
-| **Brownfield Interview** | Modifying existing codebase | `./ralph/new.sh my-feature --interview -p ../myapp` |
+| **Manual PRD** | You already have a clear PRD | `./wiggumz/new.sh my-feature` |
+| **Greenfield Interview** | Building something new | `./wiggumz/new.sh my-project --interview` |
+| **Brownfield Interview** | Modifying existing codebase | `./wiggumz/new.sh my-feature --interview -p ../myapp` |
 
 ---
 
@@ -22,26 +22,26 @@ Use this when you already know exactly what to build.
 
 ```mermaid
 flowchart TD
-    A[./ralph/new.sh my-feature] --> B[Edit prd.md with your requirements]
-    B --> C[./ralph/convert.sh my-feature]
+    A[./wiggumz/new.sh my-feature] --> B[Edit prd.md with your requirements]
+    B --> C[./wiggumz/convert.sh my-feature]
     C --> D[Review prd.json]
-    D --> E[./ralph/start.sh my-feature --monitor]
+    D --> E[./wiggumz/start.sh my-feature --monitor]
     E --> F[Ralph implements tasks autonomously]
 ```
 
 **Commands:**
 ```bash
 # 1. Create project
-./ralph/new.sh my-feature
+./wiggumz/new.sh my-feature
 
 # 2. Edit PRD manually
-code ralph/projects/my-feature/prd.md
+code wiggumz/projects/my-feature/prd.md
 
 # 3. Convert to tasks
-./ralph/convert.sh my-feature
+./wiggumz/convert.sh my-feature
 
 # 4. Start loop
-./ralph/start.sh my-feature --monitor
+./wiggumz/start.sh my-feature --monitor
 ```
 
 ---
@@ -52,26 +52,26 @@ Use this when building something new from scratch. Ralph interviews you to gathe
 
 ```mermaid
 flowchart TD
-    A[./ralph/new.sh my-project --interview] --> B{Select mode}
+    A[./wiggumz/new.sh my-project --interview] --> B{Select mode}
     B -->|Greenfield| C[Claude interviews you]
     C --> D[What are you building?]
     D --> E[Features? Tech stack? Architecture?]
     E --> F[Claude generates comprehensive PRD]
     F --> G[Auto-commit to git]
-    G --> H[./ralph/convert.sh my-project]
-    H --> I[./ralph/start.sh my-project --monitor]
+    G --> H[./wiggumz/convert.sh my-project]
+    H --> I[./wiggumz/start.sh my-project --monitor]
 ```
 
 **Commands:**
 ```bash
 # Interactive mode - will prompt for brownfield vs greenfield
-./ralph/new.sh my-project --interview
+./wiggumz/new.sh my-project --interview
 
 # Or directly specify mode
-python3 ralph/interview.py my-project -m greenfield
+python3 wiggumz/interview.py my-project -m greenfield
 
 # With alternative Claude command
-RALPH_CLAUDE_CMD="glmclaude" ./ralph/new.sh my-project --interview
+RALPH_CLAUDE_CMD="glmclaude" ./wiggumz/new.sh my-project --interview
 ```
 
 **Interview Process:**
@@ -92,7 +92,7 @@ Use this when modifying an existing codebase. Ralph analyzes the code first, the
 
 ```mermaid
 flowchart TD
-    A[./ralph/new.sh my-feature --interview -p ../myapp] --> B{Select mode}
+    A[./wiggumz/new.sh my-feature --interview -p ../myapp] --> B{Select mode}
     B -->|Brownfield| C[Python Quick Scan]
     C --> D[Parse package.json<br/>Traverse directories<br/>Extract dependencies]
     D --> E[Claude Refines Analysis]
@@ -103,20 +103,20 @@ flowchart TD
     I --> J[Claude generates PRD for changes]
     J --> K[Branch management<br/>Create/select branch]
     K --> L[Auto-commit PRD + BROWNFIELD.md]
-    L --> M[./ralph/convert.sh my-feature]
-    M --> N[./ralph/start.sh my-feature --monitor]
+    L --> M[./wiggumz/convert.sh my-feature]
+    M --> N[./wiggumz/start.sh my-feature --monitor]
 ```
 
 **Commands:**
 ```bash
 # Auto-detect project root from current directory
-./ralph/new.sh my-feature --interview
+./wiggumz/new.sh my-feature --interview
 
 # Specify exact path
-./ralph/new.sh my-feature --interview -p ../myapp
+./wiggumz/new.sh my-feature --interview -p ../myapp
 
 # Or use interview.py directly
-python3 ralph/interview.py my-feature -p ../myapp
+python3 wiggumz/interview.py my-feature -p ../myapp
 ```
 
 **Interview Process:**
@@ -132,7 +132,7 @@ python3 ralph/interview.py my-feature -p ../myapp
    - UI/API/data changes (as needed)
 
 3. **Branch Management**
-   - Suggests feature branch: `ralph/<project-name>`
+   - Suggests feature branch: `wiggumz/<project-name>`
    - Can create new branch or use existing
    - Confirms before proceeding
 
@@ -158,22 +158,22 @@ python3 --version
 
 ## Commands
 
-### `./ralph/new.sh <project-name> [OPTIONS]`
+### `./wiggumz/new.sh <project-name> [OPTIONS]`
 
 Create a new Ralph project.
 
 ```bash
 # Manual PRD mode (default)
-./ralph/new.sh my-feature
+./wiggumz/new.sh my-feature
 
 # Interview mode (interactive)
-./ralph/new.sh my-project --interview
+./wiggumz/new.sh my-project --interview
 
 # Brownfield interview with path
-./ralph/new.sh my-feature --interview -p ../myapp
+./wiggumz/new.sh my-feature --interview -p ../myapp
 
 # Alternative Claude command
-./ralph/new.sh my-project --interview --claude-cmd "glmclaude"
+./wiggumz/new.sh my-project --interview --claude-cmd "glmclaude"
 ```
 
 | Option | Description |
@@ -185,7 +185,7 @@ Create a new Ralph project.
 
 ---
 
-### `python3 ralph/interview.py <project-name> [OPTIONS]`
+### `python3 wiggumz/interview.py <project-name> [OPTIONS]`
 
 Run interview mode directly (same as `new.sh --interview`).
 
@@ -214,38 +214,38 @@ python3 interview.py myproject -o ./custom-output
 
 ---
 
-### `./ralph/convert.sh <project-name>`
+### `./wiggumz/convert.sh <project-name>`
 
 Convert PRD.md to actionable JSON tasks using Claude.
 
 ```bash
-./ralph/convert.sh my-feature
-# Reads: ralph/projects/my-feature/prd.md
-# Creates: ralph/projects/my-feature/prd.json
-# Creates: ralph/projects/my-feature/requirements.md
+./wiggumz/convert.sh my-feature
+# Reads: wiggumz/projects/my-feature/prd.md
+# Creates: wiggumz/projects/my-feature/prd.json
+# Creates: wiggumz/projects/my-feature/requirements.md
 ```
 
 ---
 
-### `./ralph/start.sh <project-name> [OPTIONS]`
+### `./wiggumz/start.sh <project-name> [OPTIONS]`
 
 Run the autonomous development loop.
 
 ```bash
 # Without tmux (output directly in terminal)
-./ralph/start.sh my-feature
+./wiggumz/start.sh my-feature
 
 # With tmux monitoring (recommended)
-./ralph/start.sh my-feature --monitor
+./wiggumz/start.sh my-feature --monitor
 
 # Limit iterations
-./ralph/start.sh my-feature -n 10
+./wiggumz/start.sh my-feature -n 10
 
 # Check status
-./ralph/start.sh my-feature --status
+./wiggumz/start.sh my-feature --status
 
 # Reset circuit breaker
-./ralph/start.sh my-feature --reset
+./wiggumz/start.sh my-feature --reset
 ```
 
 | Option | Description |
@@ -269,7 +269,7 @@ When using interview mode with a git repository:
 
 1. **Branch Detection** - Uses `gh` CLI to detect repository info
 2. **Branch Prompt** (brownfield):
-   - Suggests feature branch: `ralph/<project-name>`
+   - Suggests feature branch: `wiggumz/<project-name>`
    - Option to create new, use existing, or skip
 3. **Confirmation** - Shows current branch + uncommitted changes warning
 4. **Auto-Commit** - Commits PRD files with descriptive message
@@ -281,12 +281,12 @@ Git Repository Detected
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Current branch: main
   Default branch: main
-  Available branches: main, feature-1, ralph/previous-work
+  Available branches: main, feature-1, wiggumz/previous-work
 
-  Suggested feature branch: ralph/my-new-feature
+  Suggested feature branch: wiggumz/my-new-feature
 
 Options:
-  1) Create and use feature branch (Will create: ralph/my-new-feature)
+  1) Create and use feature branch (Will create: wiggumz/my-new-feature)
   2) Use current branch (Current: main)
   3) Use existing branch (Select from available branches)
   4) Enter custom branch name
@@ -301,7 +301,7 @@ Generated `prd.json` includes the branch name:
 
 ```json
 {
-  "branchName": "ralph/my-new-feature",
+  "branchName": "wiggumz/my-new-feature",
   "userStories": [...]
 }
 ```
@@ -316,7 +316,7 @@ The `prd.json` file has this structure:
 
 ```json
 {
-  "branchName": "ralph/feature-name",
+  "branchName": "wiggumz/feature-name",
   "userStories": [
     {
       "id": "1.1",
@@ -362,7 +362,7 @@ When running with `--monitor`:
 | `Ctrl+B`, `←/→` | Switch between panes |
 | `Ctrl+B`, `[` | Enter scroll mode (`q` to exit) |
 | `tmux ls` | List sessions |
-| `tmux attach -t ralph-<project>` | Reattach to session |
+| `tmux attach -t wiggumz-<project>` | Reattach to session |
 
 ---
 
@@ -420,7 +420,7 @@ Ralph updates `AGENTS.md` files in directories where it made changes:
 ## Project Structure
 
 ```
-ralph/
+wiggumz/
 ├── new.sh              # Create new project
 ├── convert.sh          # PRD → JSON converter
 ├── start.sh            # Main loop
@@ -504,7 +504,7 @@ Current project status:
   "mode": "brownfield",
   "created_at": "2026-01-14T13:30:00",
   "target_path": "/path/to/codebase",
-  "branch": "ralph/my-feature",
+  "branch": "wiggumz/my-feature",
   "status": "interview_complete"
 }
 ```
@@ -526,15 +526,15 @@ Current project status:
 
 ### Circuit breaker opened
 ```bash
-./ralph/start.sh <project> --status  # Check what happened
-./ralph/start.sh <project> --reset   # Reset and continue
+./wiggumz/start.sh <project> --status  # Check what happened
+./wiggumz/start.sh <project> --reset   # Reset and continue
 ```
 
 ### Rate limit hit
 Ralph automatically waits for the next hour. You can detach with `Ctrl+B, D` and come back later.
 
 ### Claude not responding
-Check the logs in `ralph/projects/<project>/logs/` for details.
+Check the logs in `wiggumz/projects/<project>/logs/` for details.
 
 ### Interview mode issues
 - Verify Python 3.12+ is installed: `python3 --version`

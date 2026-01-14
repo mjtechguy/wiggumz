@@ -1,5 +1,5 @@
 [project]
-name = "ralph"
+name = "wiggumz"
 version = "0.1.0"
 description = "Autonomous AI development loop using Claude Code"
 requires-python = ">=3.12"

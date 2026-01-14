@@ -8,7 +8,7 @@ __pycache__/
 dist/
 build/
 
-# Ralph project logs
+# Wiggumz project logs ( symlinked from ralph/ )
 ralph/projects/*/logs/
 ralph/projects/*/.call_count
 ralph/projects/*/.last_reset
