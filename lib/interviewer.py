@@ -15,6 +15,7 @@ def conduct_interview(
     target_path: Optional[Path] = None,
     claude_cmd: str = "claude --dangerously-skip-permissions",
     ralph_dir: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Generate a pasteable interview prompt for Claude.
@@ -25,6 +26,7 @@ def conduct_interview(
         target_path: Path to the codebase being analyzed
         claude_cmd: Claude command to use (unused, for compatibility)
         ralph_dir: Path to Ralph directory (for prompt templates)
+        output_dir: Path to wiggumz projects directory (where PRD should be written)
 
     Returns:
         Dictionary with interview results (placeholder for now)
@@ -33,13 +35,15 @@ def conduct_interview(
         ralph_dir = Path(__file__).parent.parent
 
     work_dir = target_path or Path.cwd()
+    output_dir = output_dir or ralph_dir / "projects" / "default"
 
     # Build the complete pasteable prompt
     pasteable_prompt = build_pasteable_prompt(
         mode=mode,
         brownfield_doc=brownfield_doc,
         target_path=work_dir,
-        ralph_dir=ralph_dir
+        ralph_dir=ralph_dir,
+        output_dir=output_dir
     )
 
     # Write to file for user to reference
@@ -82,6 +86,7 @@ def build_pasteable_prompt(
     brownfield_doc: Optional[str] = None,
     target_path: Optional[Path] = None,
     ralph_dir: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
 ) -> str:
     """
     Build the complete pasteable prompt for Claude.
@@ -91,6 +96,7 @@ def build_pasteable_prompt(
         brownfield_doc: BROWNFIELD.md content (for brownfield mode)
         target_path: Path to the codebase being analyzed
         ralph_dir: Path to Ralph directory (for prompt templates)
+        output_dir: Path to wiggumz projects directory (where PRD should be written)
 
     Returns:
         Complete prompt string ready to paste into Claude
@@ -99,6 +105,8 @@ def build_pasteable_prompt(
         ralph_dir = Path(__file__).parent.parent
 
     work_dir = target_path or Path.cwd()
+    if output_dir is None:
+        output_dir = ralph_dir / "projects" / "default"
 
     # Start with clear instructions
     prompt = """# Wiggumz PRD Interview
@@ -226,7 +234,7 @@ Ask these questions one at a time:
 """
 
     # Add output instructions
-    prd_location = work_dir / "prd.md"
+    prd_location = output_dir / "prd.md"
 
     prompt += f"""
 
@@ -264,9 +272,10 @@ def build_interview_prompt(
     brownfield_doc: Optional[str] = None,
     target_path: Optional[Path] = None,
     ralph_dir: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
 ) -> str:
     """Build the interview prompt for Claude (legacy, use build_pasteable_prompt)."""
-    return build_pasteable_prompt(mode, brownfield_doc, target_path, ralph_dir)
+    return build_pasteable_prompt(mode, brownfield_doc, target_path, ralph_dir, output_dir)
 
 
 def parse_interview_results(output: str) -> Dict[str, Any]:

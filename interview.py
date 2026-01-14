@@ -675,7 +675,8 @@ Output a comprehensive BROWNFIELD.md file.
         brownfield_doc=brownfield_doc,
         target_path=target_path,
         claude_cmd=claude_cmd,
-        ralph_dir=Path(__file__).parent
+        ralph_dir=Path(__file__).parent,
+        output_dir=output_dir
     )
 
     print()
