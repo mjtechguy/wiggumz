@@ -101,14 +101,18 @@ The JSON should match this structure:
         try:
             import pexpect
 
-            # Build the command with shell=True for proper path handling
-            shell_cmd = f"cd {shlex.quote(str(work_dir))} && {' '.join(shlex.quote(arg) for arg in cmd_parts)}"
-
             print(f"  Launching Claude interactively...")
             print()
 
             # Spawn the process with a PTY
-            child = pexpect.spawn(shell_cmd, encoding='utf-8', timeout=None)
+            # Use cwd parameter instead of shell cd command
+            child = pexpect.spawn(
+                cmd_parts[0],
+                args=cmd_parts[1:],
+                encoding='utf-8',
+                timeout=None,
+                cwd=str(work_dir)
+            )
 
             # Send the prompt to Claude
             child.sendline(prompt_with_output)
