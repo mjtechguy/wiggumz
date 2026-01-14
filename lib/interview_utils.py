@@ -143,6 +143,7 @@ def list_source_files(project_root: Path, max_depth: int = 5) -> List[Path]:
         "__pycache__", ".pytest_cache", ".next", ".nuxt", "dist",
         "build", "target", "bin", "obj", ".vscode", ".idea",
         "coverage", ".coverage", "vendor", "bower_components",
+        "wiggumz", "ralph", "ralph-cli", "wiggumz-cli", "projects",
     }
 
     try:
@@ -230,6 +231,7 @@ def build_directory_tree(project_root: Path, max_depth: int = 3) -> Dict[str, An
         "__pycache__", ".pytest_cache", ".next", ".nuxt", "dist",
         "build", "target", "bin", "obj", ".vscode", ".idea",
         "coverage", ".coverage", "vendor", "bower_components",
+        "wiggumz", "ralph", "ralph-cli", "wiggumz-cli", "projects",
     }
 
     def _build_tree(path: Path, depth: int) -> Dict[str, Any]:

@@ -32,6 +32,11 @@ def conduct_interview(
     Returns:
         Dictionary of interview results
     """
+    import tempfile
+    import shlex
+    import os
+    import sys
+
     if ralph_dir is None:
         ralph_dir = Path(__file__).parent.parent
 
@@ -47,34 +52,164 @@ def conduct_interview(
     print("  (Claude will ask you questions using AskUserQuestion)")
     print()
 
+    # Create a temporary directory for our files
+    temp_dir = Path(tempfile.mkdtemp(prefix="ralph_interview_"))
+
+    # Create the results file path (absolute path)
+    result_file = temp_dir / "interview_results.json"
+
     # Parse claude_cmd into list
-    import shlex
     cmd_parts = shlex.split(claude_cmd)
 
-    # Run Claude with the interview prompt
+    # Work directory
+    work_dir = target_path or Path.cwd()
+
+    # Prepare the prompt with output instruction
+    prompt_with_output = interview_prompt + f"""
+
+## CRITICAL: Output Format
+
+After completing the interview, you MUST write your results to this exact path:
+{result_file}
+
+Use the Write tool to save ONLY the JSON content (no markdown, no tags) to that file.
+The JSON should match this structure:
+{{
+  "mode": "{mode}",
+  ... (rest of your interview results)
+}}
+"""
+
+    # Write the prompt to a file that Claude can read
+    prompt_file = work_dir / ".ralph_interview_prompt.md"
+    prompt_file.write_text(prompt_with_output)
+
+    # Also write to a backup location
+    temp_prompt = temp_dir / "prompt.md"
+    temp_prompt.write_text(prompt_with_output)
+
     try:
-        result = subprocess.run(
-            cmd_parts,
-            input=interview_prompt,
-            capture_output=True,
-            text=True,
-            cwd=target_path or Path.cwd()
-        )
+        print(f"  Working directory: {work_dir}")
+        print(f"  Results will be saved to: {result_file}")
+        print()
+        print("  " + "=" * 56)
+        print("  Starting Claude Interview Session...")
+        print("  " + "=" * 56)
+        print()
 
-        output = result.stdout
+        # Try using pexpect for proper PTY handling (if available)
+        try:
+            import pexpect
 
-        # Parse the interview results from Claude's response
-        interview_results = parse_interview_results(output)
+            # Build the command with shell=True for proper path handling
+            shell_cmd = f"cd {shlex.quote(str(work_dir))} && {' '.join(shlex.quote(arg) for arg in cmd_parts)}"
 
+            print(f"  Launching Claude interactively...")
+            print()
+
+            # Spawn the process with a PTY
+            child = pexpect.spawn(shell_cmd, encoding='utf-8', timeout=None)
+
+            # Send the prompt to Claude
+            child.sendline(prompt_with_output)
+
+            # Hand over control to the user - let them interact directly
+            # Use interact() which passes control to the user
+            child.interact()
+
+            # After interaction ends, wait for the child to terminate
+            child.close()
+
+            exit_code = child.exitstatus
+            print()
+            print(f"  Claude exited with code: {exit_code}")
+
+        except ImportError:
+            # pexpect not available, use manual fallback
+            print()
+            print("  pexpect not available, using manual mode...")
+            print()
+            print("  Please run Claude with this prompt:")
+            print()
+            print("  " + "-" * 54)
+            print(f"  cd {work_dir}")
+            print(f"  {claude_cmd}")
+            print()
+            print("  Then paste this prompt:")
+            print()
+            for line in prompt_with_output.split('\n')[:40]:
+                print(f"  {line}")
+            if len(prompt_with_output.split('\n')) > 40:
+                print("  ... (full prompt saved to .ralph_interview_prompt.md)")
+            print("  " + "-" * 54)
+            print()
+            print(f"  Full prompt: {prompt_file}")
+            print()
+
+            input("  Press Enter when you've completed the interview in Claude...")
+            print()
+
+        print()
+        print("  " + "=" * 56)
+        print("  Looking for interview results...")
+        print("  " + "=" * 56)
+
+        # Try to read the results file
+        interview_results = {}
+        if result_file.exists():
+            try:
+                results_content = result_file.read_text()
+                interview_results = json.loads(results_content)
+                print(f"  ✓ Results found at: {result_file}")
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"  ✗ Could not parse results file: {e}")
+
+        # Also check the working directory for results
+        result_marker = work_dir / ".ralph_interview_results.json"
+        if not interview_results and result_marker.exists():
+            try:
+                results_content = result_marker.read_text()
+                interview_results = json.loads(results_content)
+                result_marker.unlink()
+                print(f"  ✓ Results found at: {result_marker}")
+            except (json.JSONDecodeError, IOError):
+                pass
+
+        # Clean up temp directory
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        # Clean up prompt file
+        prompt_file.unlink(missing_ok=True)
+
+        # If still no results, return empty dict
+        if not interview_results:
+            print()
+            print("  Warning: No interview results were captured.")
+            print("  Please ensure Claude wrote the results to the specified file.")
+            return {
+                "mode": mode,
+                "parsed": False,
+                "error": "No results file found"
+            }
+
+        print(f"  ✓ Interview results captured successfully")
         return interview_results
 
-    except subprocess.CalledProcessError as e:
-        print(f"Error running Claude: {e}")
-        print(f"stderr: {e.stderr}")
-        return {}
+    except KeyboardInterrupt:
+        print("\n\n  Interview interrupted by user.")
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        prompt_file.unlink(missing_ok=True)
+        return {"mode": mode, "error": "Interrupted by user"}
     except Exception as e:
-        print(f"Error during interview: {e}")
-        return {}
+        print(f"  Error during interview: {e}")
+        import traceback
+        traceback.print_exc()
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        prompt_file.unlink(missing_ok=True)
+        return {"mode": mode, "error": str(e)}
 
 
 def build_interview_prompt(

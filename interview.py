@@ -426,6 +426,62 @@ def run_claude_command(prompt: str, claude_cmd: str, cwd: Path) -> str:
     return result.stdout
 
 
+def show_directory_preview(path: Path, max_depth: int = 2, max_items: int = 20) -> None:
+    """
+    Show a simplified directory tree preview for user confirmation.
+
+    Args:
+        path: Path to the directory to preview
+        max_depth: Maximum depth to show
+        max_items: Maximum items per level
+    """
+    import os
+
+    skip_dirs = {
+        "node_modules", ".git", ".svn", "venv", ".venv", "env",
+        "__pycache__", ".pytest_cache", ".next", ".nuxt", "dist",
+        "build", "target", "bin", "obj", ".vscode", ".idea",
+        "coverage", ".coverage", "vendor", "bower_components",
+        "wiggumz", "ralph", "ralph-cli", "wiggumz-cli", "projects",
+    }
+
+    def _show_tree(current: Path, depth: int, prefix: str = "", is_last: bool = True) -> None:
+        if depth > max_depth:
+            return
+
+        try:
+            items = sorted(current.iterdir(), key=lambda x: (not x.is_dir(), x.name))
+            # Filter out hidden files and skip directories
+            items = [i for i in items if not i.name.startswith(".") and i.name not in skip_dirs]
+
+            # Limit items
+            if len(items) > max_items and depth == 0:
+                items = items[:max_items]
+
+            for i, item in enumerate(items):
+                is_dir = item.is_dir()
+                is_last_item = i == len(items) - 1
+
+                # Tree connector
+                connector = "└──" if is_last_item else "├──"
+                dir_indicator = "/" if is_dir else ""
+
+                print(f"  {prefix}{connector} {item.name}{dir_indicator}")
+
+                # Recurse into directories
+                if is_dir and depth < max_depth:
+                    next_prefix = prefix + ("    " if is_last_item else "│   ")
+                    _show_tree(item, depth + 1, next_prefix, is_last_item)
+
+            if len(items) > max_items and depth == 0:
+                print(f"  {prefix}└── ... ({len(items) - max_items} more items)")
+
+        except (PermissionError, OSError):
+            pass
+
+    _show_tree(path, 0)
+
+
 def main():
     args = parse_args()
 
@@ -439,12 +495,70 @@ def main():
     if args.target_path:
         target_path = Path(args.target_path).resolve()
     elif mode == "brownfield":
-        # Auto-detect project root from current directory
-        target_path = Path.cwd()
-        detected_root = find_project_root(target_path)
-        if detected_root != target_path:
-            print(f"Detected project root: {detected_root}")
-            target_path = detected_root
+        # Prompt for path to analyze
+        print()
+        print("=" * 60)
+        print("  Brownfield Mode - Codebase Path Required")
+        print("=" * 60)
+        print()
+        print("  Please enter the path to the codebase you want to modify.")
+        print("  (This is the project you'll be making changes to)")
+        print()
+
+        # Suggest current directory but exclude wiggumz/ralph
+        suggested_path = Path.cwd()
+        project_name_str = suggested_path.name
+
+        # If we're inside wiggumz/ralph, suggest the parent
+        if project_name_str in ["wiggumz", "ralph", "ralph-cli", "wiggumz-cli"]:
+            suggested_path = suggested_path.parent
+            print(f"  Note: You're inside the wiggumz/ralph directory.")
+            print(f"  Suggested parent directory: {suggested_path}")
+            print()
+
+        while True:
+            try:
+                path_input = input(f"  Path to analyze [{suggested_path}]: ").strip()
+                if path_input:
+                    target_path = Path(path_input).resolve()
+                else:
+                    target_path = suggested_path
+
+                # Verify the path exists
+                if not target_path.exists():
+                    print(f"  ✗ Path does not exist: {target_path}")
+                    print()
+                    continue
+
+                # Detect and show project root
+                detected_root = find_project_root(target_path)
+                if detected_root != target_path:
+                    print(f"  → Detected project root: {detected_root}")
+                    target_path = detected_root
+
+                # Show directory structure for confirmation
+                print()
+                print("  Directory structure:")
+                print("  " + "-" * 56)
+                show_directory_preview(target_path)
+                print("  " + "-" * 56)
+                print()
+
+                # Confirm
+                confirm = input(f"  Analyze this directory? (Y/n): ").strip().lower()
+                if confirm != 'n':
+                    break
+                else:
+                    print()
+                    path_input = input("  Enter a different path (or press Ctrl+C to cancel): ").strip()
+                    if path_input:
+                        target_path = Path(path_input).resolve()
+
+            except (EOFError, KeyboardInterrupt):
+                print("\n  Cancelled.")
+                sys.exit(0)
+
+        print()
     else:
         # Greenfield - current directory is fine
         target_path = Path.cwd()
