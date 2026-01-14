@@ -492,22 +492,39 @@ def is_git_repo(path: Path) -> bool:
     """
     Check if a directory is a git repository.
 
+    IMPORTANT: Only returns True if .git is directly in the given path,
+    not in a parent directory. This prevents false positives when scanning
+    a parent directory that contains wiggumz as a subdirectory.
+
     Args:
         path: Path to check
 
     Returns:
-        True if path is in a git repository
+        True if path is itself a git repository (not just inside one)
     """
+    # Check if .git exists directly in this directory
+    git_dir = path / ".git"
+    if git_dir.exists():
+        return True
+
+    # Also check with git rev-parse, but only accept if git-dir is ".git"
+    # (meaning the repo root is exactly this directory, not a parent)
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
+            ["git", "rev-parse", "--git-dir", "--show-toplevel"],
             cwd=path,
             capture_output=True,
             text=True
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            git_dir_relative = lines[0] if lines else ""
+            # Only consider it a repo if .git is directly in this directory
+            return git_dir_relative == ".git"
     except (FileNotFoundError, subprocess.SubprocessError):
-        return False
+        pass
+
+    return False
 
 
 def get_current_branch(path: Path) -> Optional[str]:
