@@ -1,13 +1,10 @@
 """
 Ralph Interviewer Module
 
-Orchestrates the interview process using Claude Code CLI.
-The interviewer invokes Claude which uses AskUserQuestion tool internally.
+Generates a prompt that users can paste into Claude to conduct the interview.
 """
 
 import json
-import re
-import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -20,540 +17,272 @@ def conduct_interview(
     ralph_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
-    Conduct interview using Claude Code CLI.
+    Generate a pasteable interview prompt for Claude.
 
     Args:
         mode: "brownfield" or "greenfield"
         brownfield_doc: BROWNFIELD.md content (for brownfield mode)
         target_path: Path to the codebase being analyzed
-        claude_cmd: Claude command to use
+        claude_cmd: Claude command to use (unused, for compatibility)
         ralph_dir: Path to Ralph directory (for prompt templates)
 
     Returns:
-        Dictionary of interview results
+        Dictionary with interview results (placeholder for now)
     """
-    import tempfile
-    import shlex
-    import os
-    import sys
-
     if ralph_dir is None:
         ralph_dir = Path(__file__).parent.parent
 
-    # Build the interview prompt
-    interview_prompt = build_interview_prompt(
+    work_dir = target_path or Path.cwd()
+
+    # Build the complete pasteable prompt
+    pasteable_prompt = build_pasteable_prompt(
         mode=mode,
         brownfield_doc=brownfield_doc,
-        target_path=target_path,
+        target_path=work_dir,
         ralph_dir=ralph_dir
     )
 
-    print("  Starting Claude interview...")
-    print("  (Claude will ask you questions using AskUserQuestion)")
+    # Write to file for user to reference
+    prompt_file = work_dir / ".ralph_interview_prompt.md"
+    prompt_file.write_text(pasteable_prompt)
+
+    print()
+    print("=" * 60)
+    print("  Interview Prompt Ready")
+    print("=" * 60)
+    print()
+    print("  Paste the following into Claude at the root of your project:")
+    print()
+    print("-" * 60)
+    print(pasteable_prompt)
+    print("-" * 60)
+    print()
+    print(f"  Prompt also saved to: {prompt_file}")
+    print()
+    print("  After Claude completes the interview, it will write the PRD.")
     print()
 
-    # Create a temporary directory for our files
-    temp_dir = Path(tempfile.mkdtemp(prefix="ralph_interview_"))
+    # Wait for user to confirm they've completed the interview
+    try:
+        input("  Press Enter when you've completed the interview in Claude...")
+    except (EOFError, KeyboardInterrupt):
+        print("\n  Continuing...")
+    print()
 
-    # Create the results file path (absolute path)
-    result_file = temp_dir / "interview_results.json"
+    # Return a placeholder result
+    return {
+        "mode": mode,
+        "manual_interview": True,
+        "status": "prompt_generated"
+    }
 
-    # Parse claude_cmd into list
-    cmd_parts = shlex.split(claude_cmd)
 
-    # Work directory
+def build_pasteable_prompt(
+    mode: str,
+    brownfield_doc: Optional[str] = None,
+    target_path: Optional[Path] = None,
+    ralph_dir: Optional[Path] = None,
+) -> str:
+    """
+    Build the complete pasteable prompt for Claude.
+
+    Args:
+        mode: "brownfield" or "greenfield"
+        brownfield_doc: BROWNFIELD.md content (for brownfield mode)
+        target_path: Path to the codebase being analyzed
+        ralph_dir: Path to Ralph directory (for prompt templates)
+
+    Returns:
+        Complete prompt string ready to paste into Claude
+    """
+    if ralph_dir is None:
+        ralph_dir = Path(__file__).parent.parent
+
     work_dir = target_path or Path.cwd()
 
-    # Prepare the prompt with output instruction
-    prompt_with_output = interview_prompt + f"""
+    # Start with clear instructions
+    prompt = """# Wiggumz PRD Interview
 
-## CRITICAL: Output Format
+You are conducting an interview to generate a Product Requirements Document (PRD).
 
-After completing the interview, you MUST write your results to this exact path:
-{result_file}
+## Setup
 
-Use the Write tool to save ONLY the JSON content (no markdown, no tags) to that file.
-The JSON should match this structure:
-{{
-  "mode": "{mode}",
-  ... (rest of your interview results)
-}}
+First, read the following context files to understand the project:
 """
 
-    # Write the prompt to a file that Claude can read
-    prompt_file = work_dir / ".ralph_interview_prompt.md"
-    prompt_file.write_text(prompt_with_output)
+    # Add references to files Claude should read
+    files_to_read = []
 
-    # Also write to a backup location
-    temp_prompt = temp_dir / "prompt.md"
-    temp_prompt.write_text(prompt_with_output)
+    # 1. CLAUDE.md if it exists (user's project-specific instructions)
+    claude_md = work_dir / "CLAUDE.md"
+    if claude_md.exists():
+        files_to_read.append(f"1. Read `{claude_md}` - This project's specific development guidelines")
 
-    try:
-        print(f"  Working directory: {work_dir}")
-        print(f"  Results will be saved to: {result_file}")
-        print()
-        print("  " + "=" * 56)
-        print("  Starting Claude Interview Session...")
-        print("  " + "=" * 56)
-        print()
+    # 2. BROWNFIELD.md if in brownfield mode
+    if mode == "brownfield" and brownfield_doc:
+        brownfield_file = work_dir / "BROWNFIELD.md"
+        files_to_read.append(f"2. Read `{brownfield_file}` - Analysis of the existing codebase")
 
-        # Try using pexpect for proper PTY handling (if available)
-        try:
-            import pexpect
+    if not files_to_read:
+        files_to_read.append("1. Explore the codebase to understand the project structure")
 
-            print(f"  Launching Claude interactively...")
-            print()
+    for file_ref in files_to_read:
+        prompt += f"\n{file_ref}\n"
 
-            # Spawn the process with a PTY
-            # Use cwd parameter instead of shell cd command
-            child = pexpect.spawn(
-                cmd_parts[0],
-                args=cmd_parts[1:],
-                encoding='utf-8',
-                timeout=None,
-                cwd=str(work_dir)
-            )
+    # Add the interview instructions
+    prompt += f"""
 
-            # Send the prompt to Claude
-            child.sendline(prompt_with_output)
+## Interview Mode
 
-            # Hand over control to the user - let them interact directly
-            # Use interact() which passes control to the user
-            child.interact()
+This is a **{mode.upper()}** project.
+"""
 
-            # After interaction ends, wait for the child to terminate
-            child.close()
+    if mode == "brownfield":
+        prompt += """
 
-            exit_code = child.exitstatus
-            print()
-            print(f"  Claude exited with code: {exit_code}")
+You are helping to define changes to an existing codebase.
 
-        except ImportError:
-            # pexpect not available, use manual fallback
-            print()
-            print("  pexpect not available, using manual mode...")
-            print()
-            print("  Please run Claude with this prompt:")
-            print()
-            print("  " + "-" * 54)
-            print(f"  cd {work_dir}")
-            print(f"  {claude_cmd}")
-            print()
-            print("  Then paste this prompt:")
-            print()
-            for line in prompt_with_output.split('\n')[:40]:
-                print(f"  {line}")
-            if len(prompt_with_output.split('\n')) > 40:
-                print("  ... (full prompt saved to .ralph_interview_prompt.md)")
-            print("  " + "-" * 54)
-            print()
-            print(f"  Full prompt: {prompt_file}")
-            print()
+Using the AskUserQuestion tool, interview the user about what changes they want to make.
 
-            input("  Press Enter when you've completed the interview in Claude...")
-            print()
+### Interview Questions
 
-        print()
-        print("  " + "=" * 56)
-        print("  Looking for interview results...")
-        print("  " + "=" * 56)
+Ask these questions one at a time:
 
-        # Try to read the results file
-        interview_results = {}
-        if result_file.exists():
-            try:
-                results_content = result_file.read_text()
-                interview_results = json.loads(results_content)
-                print(f"  ✓ Results found at: {result_file}")
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"  ✗ Could not parse results file: {e}")
+1. **What is the main change?**
+   - New feature, refactor, bug fix, or something else?
+   - What do you want to accomplish?
 
-        # Also check the working directory for results
-        result_marker = work_dir / ".ralph_interview_results.json"
-        if not interview_results and result_marker.exists():
-            try:
-                results_content = result_marker.read_text()
-                interview_results = json.loads(results_content)
-                result_marker.unlink()
-                print(f"  ✓ Results found at: {result_marker}")
-            except (json.JSONDecodeError, IOError):
-                pass
+2. **Scope & Constraints**
+   - Are there parts of the codebase that should NOT be modified?
+   - Are there existing patterns that MUST be reused?
+   - Any constraints or limitations?
 
-        # Clean up temp directory
-        import shutil
-        shutil.rmtree(temp_dir, ignore_errors=True)
+3. **Functional Requirements**
+   - What should the new/changed behavior be?
+   - Inputs and expected outputs?
+   - What does "done" look like?
 
-        # Clean up prompt file
-        prompt_file.unlink(missing_ok=True)
+4. **Technical Requirements**
+   - Specific libraries/packages to use?
+   - Performance or security requirements?
+   - Testing requirements?
 
-        # If still no results, return empty dict
-        if not interview_results:
-            print()
-            print("  Warning: No interview results were captured.")
-            print("  Please ensure Claude wrote the results to the specified file.")
-            return {
-                "mode": mode,
-                "parsed": False,
-                "error": "No results file found"
-            }
+5. **UI/Data/API Changes** (if applicable)
+   - What UI changes are needed?
+   - What data models or API endpoints need to change?
 
-        print(f"  ✓ Interview results captured successfully")
-        return interview_results
+6. **Confirmation**
+   - Summarize what you understood
+   - Ask if anything needs to be clarified
+"""
 
-    except KeyboardInterrupt:
-        print("\n\n  Interview interrupted by user.")
-        import shutil
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        prompt_file.unlink(missing_ok=True)
-        return {"mode": mode, "error": "Interrupted by user"}
-    except Exception as e:
-        print(f"  Error during interview: {e}")
-        import traceback
-        traceback.print_exc()
-        import shutil
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        prompt_file.unlink(missing_ok=True)
-        return {"mode": mode, "error": str(e)}
+    else:  # greenfield
+        prompt += """
+
+You are helping to define a new project from scratch.
+
+Using the AskUserQuestion tool, interview the user about what they want to build.
+
+### Interview Questions
+
+Ask these questions one at a time:
+
+1. **What are you building?**
+   - Main purpose of the project?
+   - What problem does it solve?
+   - Who are the primary users?
+
+2. **Features**
+   - What features should the project have?
+   - For each feature: what does it do, how do users interact with it?
+
+3. **Technology Stack**
+   - Language/runtime (e.g., Python 3.12, Node.js 20, Rust)
+   - Framework (e.g., FastAPI, Next.js, Django)
+   - Database (if any)
+   - Frontend framework (if applicable)
+   - Key libraries to use
+
+4. **Architecture**
+   - Web app, CLI tool, library, API, or something else?
+   - Any specific architectural patterns?
+   - External services/integrations needed?
+
+5. **Data Models** (if applicable)
+   - What data needs to be stored?
+   - What are the main entities and relationships?
+
+6. **User Interface** (if applicable)
+   - Main pages/screens?
+   - Navigation structure?
+   - Design preferences?
+
+7. **Non-Functional Requirements**
+   - Performance, security, deployment requirements?
+
+8. **Confirmation**
+   - Summarize what you understood
+   - Ask if anything needs to be clarified
+"""
+
+    # Add output instructions
+    prd_location = work_dir / "prd.md"
+
+    prompt += f"""
+
+## Output
+
+After completing the interview, generate a comprehensive PRD and write it to:
+
+**`{prd_location}`**
+
+Use the Write tool to save the PRD.
+
+### PRD Structure
+
+The PRD should include:
+
+1. **Overview** - Project name, purpose, target users
+2. **Features** - Detailed feature descriptions with acceptance criteria
+3. **Technical Requirements** - Tech stack, libraries, architecture
+4. **Data Models** (if applicable) - Entities, relationships, validation
+5. **API Endpoints** (if applicable) - Routes, request/response formats
+6. **UI/UX** (if applicable) - Page structure, components, interactions
+7. **Success Criteria** - How to know when the project is complete
+
+---
+
+Begin the interview now. Start by reading any context files, then use AskUserQuestion.
+"""
+
+    return prompt
 
 
+# Legacy functions for compatibility
 def build_interview_prompt(
     mode: str,
     brownfield_doc: Optional[str] = None,
     target_path: Optional[Path] = None,
     ralph_dir: Optional[Path] = None,
 ) -> str:
-    """Build the interview prompt for Claude."""
-
-    if ralph_dir is None:
-        ralph_dir = Path(__file__).parent.parent
-
-    # Load the appropriate interview prompt template
-    if mode == "brownfield":
-        prompt_file = ralph_dir / "lib" / "prompts" / "brownfield_interview.md"
-    else:
-        prompt_file = ralph_dir / "lib" / "prompts" / "greenfield_interview.md"
-
-    if prompt_file.exists():
-        template = prompt_file.read_text()
-    else:
-        # Fallback inline prompts
-        if mode == "brownfield":
-            template = get_brownfield_interview_template()
-        else:
-            template = get_greenfield_interview_template()
-
-    # Replace placeholders
-    context = ""
-    if brownfield_doc:
-        context = f"\n## Existing Codebase Context\n\nI've analyzed the codebase and created BROWNFIELD.md. Here's a summary:\n\n"
-        context += brownfield_doc[:2000]  # First 2000 chars as preview
-        context += "\n\n(Full BROWNFIELD.md is available for reference)"
-
-    template = template.replace("{CONTEXT}", context)
-    template = template.replace("{TARGET_PATH}", str(target_path or "."))
-
-    return template
+    """Build the interview prompt for Claude (legacy, use build_pasteable_prompt)."""
+    return build_pasteable_prompt(mode, brownfield_doc, target_path, ralph_dir)
 
 
 def parse_interview_results(output: str) -> Dict[str, Any]:
-    """
-    Parse interview results from Claude's response.
-
-    Looks for <interview_results>...</interview_results> tags.
-
-    Args:
-        output: Claude's response text
-
-    Returns:
-        Parsed interview results as dictionary
-    """
-    # Try to extract JSON from interview_results tags
-    pattern = r'<interview_results>\s*\n?(.*?)\n?</interview_results>'
-    match = re.search(pattern, output, re.DOTALL)
-
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
-            pass
-
-    # Fallback: try to find any JSON in the output
-    try:
-        # Look for JSON objects
-        json_match = re.search(r'\{[^{}]*\{.*\}[^{}]*\}', output, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
-    except (json.JSONDecodeError, ValueError):
-        pass
-
-    # If no structured output, return basic info
-    return {
-        "raw_output": output,
-        "parsed": False
-    }
+    """Placeholder for compatibility."""
+    return {"manual_interview": True}
 
 
 def get_brownfield_interview_template() -> str:
-    """Get the brownfield interview prompt template."""
-    return """# Ralph Interview - Brownfield Mode
-
-You are conducting an interview for a **brownfield** project (modifying an existing codebase).
-
-{CONTEXT}
-
-## Your Task
-
-Using the AskUserQuestion tool, interview the user about what changes they want to make to the existing codebase.
-
-## Interview Flow
-
-Ask questions in the following order, one section at a time:
-
-### 1. High-Level Intent
-**Ask:**
-"What is the main change you want to make to this codebase? Is this:
-- A new feature
-- A refactor
-- A bug fix
-- Something else
-
-Please describe what you want to accomplish."
-
-### 2. Scope & Constraints
-**Ask:**
-"Regarding the scope of changes:
-- Are there parts of the codebase that should NOT be modified?
-- Are there existing patterns/components that MUST be reused?
-- Should this change break any existing functionality?
-- Any constraints or limitations I should know about?"
-
-### 3. Functional Requirements
-**Ask:**
-"Let's detail the functional requirements:
-- What should the new/changed behavior be?
-- What are the inputs and expected outputs?
-- What edge cases need to be handled?
-- What does 'done' look like for this feature?"
-
-### 4. Technical Requirements
-**Ask:**
-"Technical requirements:
-- Are there specific libraries/packages that should be used?
-- Any performance requirements?
-- Security considerations?
-- Should tests be written? What level of coverage?
-- Should documentation be updated?"
-
-### 5. UI Changes (Conditional)
-**If the change involves UI:**
-- Describe the UI changes needed
-- Are there existing UI components to follow?
-- Any design mockups or references?
-- Mobile/responsive considerations?
-
-### 6. Data/API Changes (Conditional)
-**If the change involves data models:**
-- What data models need to be created/modified?
-- Database migrations needed?
-- What relationships exist between entities?
-
-**If the change involves APIs:**
-- What endpoints need to be created/modified?
-- Request/response formats?
-- Authentication/authorization requirements?
-
-### 7. Confirmation
-**Present a summary:**
-"Here's what I understand you want to do:
-- [Summary of changes]
-- [Scope constraints]
-- [Key requirements]
-
-Is this correct? Would you like to add, change, or clarify anything?"
-
-## Output Format
-
-After the interview is complete, output your results as JSON inside <interview_results> tags:
-
-```json
-<interview_results>
-{
-  "mode": "brownfield",
-  "project_type": "...",
-  "high_level_intent": "...",
-  "scope_constraints": "...",
-  "functional_requirements": ["...", "..."],
-  "technical_requirements": {
-    "libraries": [...],
-    "performance": "...",
-    "security": "...",
-    "testing": "..."
-  },
-  "ui_changes": {  "if applicable": "..." },
-  "data_changes": {  "if applicable": "..." },
-  "api_changes": {  "if applicable": "..." },
-  "user_confirmed": true/false,
-  "additional_notes": "..."
-}
-</interview_results>
-```
-
-## Important Notes
-
-- Be thorough but efficient. Most interviews should take 5-10 questions total.
-- After each answer, confirm understanding before moving on.
-- If the user gives a vague answer, ask a focused follow-up.
-- The goal is to gather enough detail for autonomous development.
-
-Begin the interview now.
-"""
+    """Placeholder for compatibility."""
+    return ""
 
 
 def get_greenfield_interview_template() -> str:
-    """Get the greenfield interview prompt template."""
-    return """# Ralph Interview - Greenfield Mode
-
-You are conducting an interview for a **greenfield** project (building something new).
-
-## Your Task
-
-Using the AskUserQuestion tool, interview the user about what they want to build.
-
-## Interview Flow
-
-Ask questions in the following order, one section at a time:
-
-### 1. Project Concept
-**Ask:**
-"What are you building? Please describe:
-- What is the main purpose of this project?
-- What problem does it solve?
-- Who are the primary users?
-- What makes this project unique or valuable?"
-
-### 2. Features
-**Ask:**
-"What features should this project have?
-
-For each feature, please tell me:
-- What does it do?
-- How will users interact with it?
-- What makes this feature complete?
-
-Please list all features you have in mind, even if they're 'nice to have'."
-
-### 3. Technology Stack
-**Ask:**
-"What technology stack should be used?
-
-Please specify:
-- Language/runtime (e.g., Python 3.12, Node.js 20, Rust)
-- Framework (e.g., FastAPI, Next.js, Django)
-- Database (if any) (e.g., PostgreSQL, MongoDB, SQLite)
-- Frontend framework (if applicable) (e.g., React, Vue, Svelte)
-- Key libraries you want to use
-
-If you're unsure, I can suggest based on your requirements."
-
-### 4. Architecture
-**Ask:**
-"Let's define the architecture:
-- Is this a web app, CLI tool, library, API, or something else?
-- Should it be a monorepo or single package?
-- Any specific architectural patterns to follow? (MVC, clean architecture, etc.)
-- Any external services/integrations needed?"
-
-### 5. Data Models (Conditional)
-**If the project has data:**
-"What data needs to be stored?
-
-For each data entity:
-- What are the main fields/properties?
-- What are the relationships between entities?
-- Any validation requirements?"
-
-### 6. User Interface (Conditional)
-**If the project has a UI:**
-"For the user interface:
-- What are the main pages/screens?
-- How should users navigate through the app?
-- Any specific design preferences or references?
-- Mobile responsiveness requirements?"
-
-### 7. Non-Functional Requirements
-**Ask:**
-"Non-functional requirements:
-- Performance: Any specific requirements? (response times, throughput, etc.)
-- Security: Authentication, authorization, data protection needs?
-- Deployment: Where will this run? Any constraints?
-- Monitoring/logging requirements?"
-
-### 8. Confirmation
-**Present a summary:**
-"Here's what I understand about your project:
-- [Project concept]
-- [Key features]
-- [Tech stack]
-- [Architecture]
-
-Does this look right? Would you like to add, change, or clarify anything?"
-
-## Output Format
-
-After the interview is complete, output your results as JSON inside <interview_results> tags:
-
-```json
-<interview_results>
-{
-  "mode": "greenfield",
-  "project_name": "...",
-  "project_concept": "...",
-  "purpose": "...",
-  "target_users": "...",
-  "features": [
-    {
-      "name": "...",
-      "description": "...",
-      "user_interaction": "...",
-      "acceptance_criteria": "..."
-    }
-  ],
-  "tech_stack": {
-    "language": "...",
-    "framework": "...",
-    "database": "...",
-    "frontend": "...",
-    "key_libraries": [...]
-  },
-  "architecture": {
-    "type": "...",
-    "structure": "...",
-    "patterns": [...],
-    "integrations": [...]
-  },
-  "data_models": [  "if applicable": "..." ],
-  "ui_design": {  "if applicable": "..." },
-  "non_functional": {
-    "performance": "...",
-    "security": "...",
-    "deployment": "..."
-  },
-  "user_confirmed": true/false,
-  "additional_notes": "..."
-}
-</interview_results>
-```
-
-## Important Notes
-
-- Be thorough but efficient. Most interviews should take 5-10 questions total.
-- After each answer, confirm understanding before moving on.
-- If the user gives a vague answer, ask a focused follow-up.
-- The goal is to gather enough detail for autonomous development.
-
-Begin the interview now.
-"""
+    """Placeholder for compatibility."""
+    return ""
 
 
 # Export the main function
-__all__ = ["conduct_interview"]
+__all__ = ["conduct_interview", "build_pasteable_prompt"]
