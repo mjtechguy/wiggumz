@@ -169,17 +169,60 @@ EOF
         # Run interview.py
         eval "$interview_cmd"
 
-        echo ""
-        echo "Next steps:"
-        echo "  1. Review generated PRD:"
-        echo "     ${EDITOR:-code} $project_dir/prd.md"
-        echo ""
-        echo "  2. Convert PRD to JSON tasks:"
-        echo "     ./ralph/convert.sh $project_name"
-        echo ""
-        echo "  3. Start the Ralph loop:"
-        echo "     ./ralph/start.sh $project_name"
-        echo ""
+        # Check if PRD was created
+        if [[ -f "$project_dir/prd.md" ]]; then
+            echo ""
+            echo "============================================================"
+            echo "  PRD Generated Successfully"
+            echo "============================================================"
+            echo ""
+            echo "Would you like to convert the PRD to JSON tasks now?"
+            echo "This will populate prd.json with actionable tasks."
+            echo ""
+
+            # Prompt user to convert
+            read -p "Convert PRD now? (Y/n): " convert_choice
+            convert_choice=$(echo "$convert_choice" | tr '[:upper:]' '[:lower:]')
+
+            if [[ "$convert_choice" != "n" ]]; then
+                echo ""
+                echo "Converting PRD to JSON tasks..."
+                "$SCRIPT_DIR/convert.sh" "$project_name"
+                echo ""
+                echo "============================================================"
+                echo "  Conversion Complete"
+                echo "============================================================"
+                echo ""
+                echo "Next steps:"
+                echo "  1. Review generated tasks:"
+                echo "     ${EDITOR:-code} $project_dir/prd.json"
+                echo ""
+                echo "  2. Start the Ralph loop:"
+                echo "     ./ralph/start.sh $project_name"
+                echo ""
+            else
+                echo ""
+                echo "Next steps:"
+                echo "  1. Review generated PRD:"
+                echo "     ${EDITOR:-code} $project_dir/prd.md"
+                echo ""
+                echo "  2. Convert PRD to JSON tasks:"
+                echo "     ./ralph/convert.sh $project_name"
+                echo ""
+                echo "  3. Start the Ralph loop:"
+                echo "     ./ralph/start.sh $project_name"
+                echo ""
+            fi
+        else
+            echo ""
+            echo "⚠️  PRD not found at: $project_dir/prd.md"
+            echo ""
+            echo "Make sure you completed the interview in Claude and it wrote the PRD."
+            echo ""
+            echo "To convert once ready:"
+            echo "  ./ralph/convert.sh $project_name"
+            echo ""
+        fi
     else
         echo ""
         echo "Next steps:"
