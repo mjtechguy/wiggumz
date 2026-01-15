@@ -377,12 +377,7 @@ $branch_warning
    - Synthesize results from all subagents before implementing
    - Use when exploration and planning can happen independently
 
-   Example parallel launch:
-   ```
-   Launch Explore agent: "Find all user authentication related files"
-   Launch Plan agent: "Design the OAuth2 integration flow"
-   → Both run at once → you review both outputs → implement
-   ```
+   Example: Launch Explore agent to find auth files AND Plan agent to design OAuth flow at the same time, then review both outputs and implement.
 
    **Sequential execution** when:
    - One subagent's output is needed before another can start
