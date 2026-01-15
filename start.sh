@@ -10,8 +10,25 @@ source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/circuit_breaker.sh"
 source "$SCRIPT_DIR/lib/response_analyzer.sh"
 
+# Signal handling for graceful exit
+_cleanup_pid=""
+cleanup_and_exit() {
+    local exit_code=${1:-130}  # 128 + 2 (SIGINT)
+    echo ""
+    log "WARN" "🛑 Interrupted - exiting gracefully..."
+    # Kill any tracked child processes
+    if [[ -n "$_cleanup_pid" ]]; then
+        kill "$_cleanup_pid" 2>/dev/null || true
+    fi
+    # Also kill any timeout/gtimeout processes in our group
+    pkill -P $$ 2>/dev/null || true
+    exit "$exit_code"
+}
+
+trap cleanup_and_exit SIGINT SIGTERM
+
 # Configuration
-CLAUDE_CMD="claude --dangerously-skip-permissions"
+CLAUDE_CMD=${CLAUDE_CMD:-"claude --dangerously-skip-permissions"}
 
 # Use gtimeout on macOS (from brew install coreutils), timeout on Linux
 if command -v gtimeout &>/dev/null; then
@@ -27,6 +44,7 @@ CLAUDE_TIMEOUT_MINUTES=${CLAUDE_TIMEOUT_MINUTES:-20}
 MAX_ITERATIONS=${MAX_ITERATIONS:-0}  # 0 = unlimited
 COMPLETE_TOKEN=${COMPLETE_TOKEN:-"<promise>COMPLETE</promise>"}
 USE_TMUX=false
+VERBOSE=${VERBOSE:-false}
 
 # Rate limiting files
 CALL_COUNT_FILE=".call_count"
@@ -43,6 +61,7 @@ Arguments:
 
 Options:
     -m, --monitor           Start with tmux session and live monitor
+    -v, --verbose           Show Claude output in real-time (also saves to log)
     -n, --max-iterations N  Max loop iterations (default: 0 = unlimited)
     -c, --calls NUM         Max calls per hour (default: $MAX_CALLS_PER_HOUR)
     -t, --timeout MIN       Claude timeout in minutes (default: $CLAUDE_TIMEOUT_MINUTES)
@@ -417,51 +436,59 @@ execute_claude() {
         fi
         
         # Execute Claude
-        if echo "$prompt_content" | $TIMEOUT_CMD ${timeout_seconds}s $CLAUDE_CMD > "$output_file" 2>&1; then
+        if [[ "$VERBOSE" == "true" ]]; then
+            log "INFO" "Running: $CLAUDE_CMD (output to terminal + $output_file)"
+            # In verbose mode, show output in real-time AND save to file
+            echo "$prompt_content" | $TIMEOUT_CMD ${timeout_seconds}s $CLAUDE_CMD 2>&1 | tee "$output_file"
+            claude_exit=${PIPESTATUS[0]}
+        else
+            echo "$prompt_content" | $TIMEOUT_CMD ${timeout_seconds}s $CLAUDE_CMD > "$output_file" 2>&1
+            claude_exit=$?
+        fi
+
+        if [[ $claude_exit -eq 0 ]]; then
             log "SUCCESS" "✅ Claude execution completed"
-            
+
             # Check for project completion token
             if grep -q "$COMPLETE_TOKEN" "$output_file"; then
                 log "SUCCESS" "🎉 Claude signaled PROJECT COMPLETE!"
                 return 2  # Special code for project complete
             fi
-            
+
             # Analyze response
             analyze_response "$output_file" "$project_dir"
             local analysis_result=$?
-            
+
             # Get analysis details
             local files_modified=$(get_analysis_result "$project_dir" "files_modified")
             local has_errors=$(get_analysis_result "$project_dir" "has_errors")
             local error_message=$(get_analysis_result "$project_dir" "error_message")
             local exit_signal=$(get_analysis_result "$project_dir" "exit_signal")
             local output_length=$(wc -c < "$output_file")
-            
+
             # Record in circuit breaker
             record_loop_result "$project_dir" "$loop_count" "${files_modified:-0}" "$has_errors" "$output_length" "$error_message"
-            
+
             # Log analysis
             log_analysis_summary "$project_dir"
-            
+
             # Claude updates prd.json directly - no need to mark stories here
             # Just log completion status for visibility
             if [[ "$exit_signal" == "true" ]]; then
                 log "SUCCESS" "📝 Claude signaled loop completion"
             fi
-            
+
             return 0
         else
-            local exit_code=$?
-            
             # Check for "out of extra usage" first (before timeout retry logic)
             # This catches cases where Claude showed the limit message before we timed out
             if check_usage_limit "$output_file"; then
                 log "WARN" "🚫 Claude out of extra usage - detected limit message"
                 return 5  # Special code for usage limit with reset time
             fi
-            
+
             # Check for timeout (exit code 124)
-            if [[ $exit_code -eq 124 ]]; then
+            if [[ $claude_exit -eq 124 ]]; then
                 if [[ $timeout_attempt -le $max_timeout_retries ]]; then
                     log "WARN" "⏰ Claude timed out after ${CLAUDE_TIMEOUT_MINUTES} minutes (attempt $timeout_attempt/$((max_timeout_retries + 1)))"
                     log "INFO" "Retrying in 10 seconds..."
@@ -472,15 +499,15 @@ execute_claude() {
                     return 4  # Special code for timeout after retries
                 fi
             else
-                log "ERROR" "❌ Claude execution failed with code $exit_code"
+                log "ERROR" "❌ Claude execution failed with code $claude_exit"
             fi
-            
+
             # Check for 5-hour API limit
             if grep -qi "5.*hour.*limit\|limit.*reached\|usage.*limit" "$output_file" 2>/dev/null; then
                 log "ERROR" "🚫 Claude API 5-hour usage limit reached"
                 return 3  # Special code for API limit
             fi
-            
+
             return 1
         fi
     done
@@ -754,18 +781,54 @@ main_loop() {
         fi
         
         log "INFO" "Incomplete stories: $incomplete"
-        update_status "$project_dir" "$loop_count" "running" ""
-        
+
+        # Get current story for tracking and logging
+        local current_story=$(get_next_story "$project_dir/prd.json")
+        local current_story_id=""
+        local current_story_title=""
+
+        if [[ -n "$current_story" ]]; then
+            current_story_id=$(get_story_id "$current_story")
+            current_story_title=$(get_story_title "$current_story")
+            log "INFO" "Working on: [$current_story_id] $current_story_title"
+            update_status "$project_dir" "$loop_count" "running" "$current_story_id"
+        else
+            update_status "$project_dir" "$loop_count" "running" ""
+        fi
+
         # Increment call counter
         local calls=$(increment_call_counter "$project_dir")
         log "INFO" "API call $calls/$MAX_CALLS_PER_HOUR this hour"
-        
+
         # Execute Claude with FULL context
         # Capture exit code manually to prevent set -e from exiting on non-zero
         local exec_result=0
         execute_claude "$project_dir" "$loop_count" || exec_result=$?
-        
+
         if [[ $exec_result -eq 0 ]]; then
+            # Fallback: Mark story complete if Claude reported success but didn't update prd.json
+            if [[ -n "$current_story_id" ]]; then
+                local status=$(get_analysis_result "$project_dir" "status")
+                local tests=$(get_analysis_result "$project_dir" "tests_status")
+
+                # Mark complete if status is COMPLETE and tests are PASSING
+                if [[ "$status" == "COMPLETE" && ("$tests" == "PASSING" || "$tests" == "NOT_RUN") ]]; then
+                    # Check if story is still incomplete before marking
+                    local still_incomplete=$(jq -r --arg id "$current_story_id" '
+                        if type == "object" then
+                            .userStories
+                        else
+                            .
+                        end | [.[] | select(.id == $id and .passes == false)] | length
+                    ' "$project_dir/prd.json" 2>/dev/null)
+
+                    if [[ "$still_incomplete" -eq 1 ]]; then
+                        mark_story_complete "$project_dir/prd.json" "$current_story_id"
+                        log "SUCCESS" "✓ Marked story [$current_story_id] as complete"
+                    fi
+                fi
+            fi
+
             update_status "$project_dir" "$loop_count" "success" ""
             log "INFO" "Pausing 5s before next loop..."
             sleep 5
@@ -873,6 +936,10 @@ while [[ $# -gt 0 ]]; do
             USE_TMUX=true
             shift
             ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
         -n|--max-iterations)
             MAX_ITERATIONS="$2"
             shift 2
@@ -887,6 +954,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --complete-token)
             COMPLETE_TOKEN="$2"
+            shift 2
+            ;;
+        --claude-cmd)
+            CLAUDE_CMD="$2"
             shift 2
             ;;
         -s|--status)

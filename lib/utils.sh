@@ -148,6 +148,18 @@ get_branch_name() {
     jq -r '.branchName // empty' "$prd_file" 2>/dev/null
 }
 
+# Extract story ID from story JSON
+get_story_id() {
+    local story_json=$1
+    echo "$story_json" | jq -r '.id' 2>/dev/null
+}
+
+# Extract story title (first 60 chars) from story JSON
+get_story_title() {
+    local story_json=$1
+    echo "$story_json" | jq -r '.story // .title // ""' 2>/dev/null | cut -c1-60
+}
+
 # Update story notes in prd.json
 update_story_notes() {
     local prd_file=$1
