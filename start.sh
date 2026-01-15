@@ -438,8 +438,10 @@ execute_claude() {
         # Execute Claude
         if [[ "$VERBOSE" == "true" ]]; then
             log "INFO" "Running: $CLAUDE_CMD (output to terminal + $output_file)"
+            log "INFO" "Press Ctrl+C to interrupt (no timeout in verbose mode)"
             # In verbose mode, show output in real-time AND save to file
-            echo "$prompt_content" | $TIMEOUT_CMD ${timeout_seconds}s $CLAUDE_CMD 2>&1 | tee "$output_file"
+            # Skip timeout in verbose mode so Ctrl+C works properly
+            echo "$prompt_content" | $CLAUDE_CMD 2>&1 | tee "$output_file"
             claude_exit=${PIPESTATUS[0]}
         else
             echo "$prompt_content" | $TIMEOUT_CMD ${timeout_seconds}s $CLAUDE_CMD > "$output_file" 2>&1
