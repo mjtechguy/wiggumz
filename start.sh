@@ -370,16 +370,30 @@ $branch_warning
    - The code you wrote is getting long or complex
    - You want to ensure maintainability before committing
 
+   **PARALLEL SUBAGENT EXECUTION (preferred for efficiency):**
+
+   For complex stories, launch multiple subagents IN PARALLEL in a single message:
+   - All subagents run simultaneously, saving significant time
+   - Synthesize results from all subagents before implementing
+   - Use when exploration and planning can happen independently
+
+   Example parallel launch:
+   ```
+   Launch Explore agent: "Find all user authentication related files"
+   Launch Plan agent: "Design the OAuth2 integration flow"
+   → Both run at once → you review both outputs → implement
+   ```
+
+   **Sequential execution** when:
+   - One subagent's output is needed before another can start
+   - The story is simple and doesn't warrant parallel work
+
    **Subagent workflow:**
    - Use Task tool with appropriate subagent_type (Explore, Plan, code-simplifier)
-   - Provide clear, specific prompts to the subagent
-   - Review the subagent's findings/recommendations
+   - Provide clear, specific prompts to each subagent
+   - For parallel: use multiple Task calls in one message
+   - Review all findings/recommendations
    - Implement the changes yourself (subagents advise, you execute)
-
-   Example:
-   - For a new API endpoint: First use Explore to find existing API patterns, then implement
-   - For a complex feature: Use Plan to design the approach, then implement
-   - After implementation: Use code-simplifier to refine the code
 
 4. **After implementation, verify your work:**
    - Run: \`turbo check-types\` to verify no type errors
