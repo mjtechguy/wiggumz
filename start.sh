@@ -67,7 +67,10 @@ Options:
     -t, --timeout MIN       Claude timeout in minutes (default: $CLAUDE_TIMEOUT_MINUTES)
     --complete-token STR    Token that signals project completion
                             (default: $COMPLETE_TOKEN)
+    --claude-cmd CMD        Override Claude command (default: claude --dangerously-skip-permissions)
     -s, --status            Show project status and exit
+    --stop                  Stop a running project
+    --doctor, --check       Verify dependencies and setup
     -r, --reset             Reset circuit breaker and continue
     -h, --help              Show this help
 
@@ -77,12 +80,15 @@ Examples:
     $0 signals -n 5               # Run max 5 iterations
     $0 signals -n 10 --monitor    # 10 iterations with monitoring
     $0 signals --status           # Show current status
+    $0 signals --stop             # Stop running project
+    $0 --doctor                   # Check setup
     $0 signals --reset            # Reset circuit breaker
 
 Environment Variables:
     MAX_ITERATIONS          Override max iterations
     MAX_CALLS_PER_HOUR      Override rate limit
     CLAUDE_TIMEOUT_MINUTES  Override Claude timeout
+    CLAUDE_CMD              Override Claude executable
     COMPLETE_TOKEN          Override completion token
 
 HELPEOF
@@ -812,21 +818,43 @@ main_loop() {
             if [[ -n "$current_story_id" ]]; then
                 local status=$(get_analysis_result "$project_dir" "status")
                 local tests=$(get_analysis_result "$project_dir" "tests_status")
+                local has_block=$(get_analysis_result "$project_dir" "has_status_block")
 
-                # Mark complete if status is COMPLETE and tests are PASSING
-                if [[ "$status" == "COMPLETE" && ("$tests" == "PASSING" || "$tests" == "NOT_RUN") ]]; then
-                    # Check if story is still incomplete before marking
-                    local still_incomplete=$(jq -r --arg id "$current_story_id" '
-                        if type == "object" then
-                            .userStories
-                        else
-                            .
-                        end | [.[] | select(.id == $id and .passes == false)] | length
-                    ' "$project_dir/prd.json" 2>/dev/null)
+                # DEBUG: Log what we got from analysis
+                if [[ "$VERBOSE" == "true" ]]; then
+                    log "DEBUG" "Analysis: status='$status' tests='$tests' has_status_block=$has_block"
+                fi
 
-                    if [[ "$still_incomplete" -eq 1 ]]; then
+                # Check if story is still incomplete before marking
+                local still_incomplete=$(jq -r --arg id "$current_story_id" '
+                    if type == "object" then
+                        .userStories
+                    else
+                        .
+                    end | [.[] | select(.id == $id and .passes == false)] | length
+                ' "$project_dir/prd.json" 2>/dev/null)
+
+                if [[ "$still_incomplete" -eq 1 ]]; then
+                    # Mark complete if:
+                    # - Status is COMPLETE (explicit), OR
+                    # - Status is empty but tests are PASSING/NOT_RUN (implicit success), OR
+                    # - Has no status block but exit was successful
+                    local should_mark=false
+
+                    if [[ "$status" == "COMPLETE" ]]; then
+                        should_mark=true
+                    elif [[ -z "$status" || "$status" == "null" ]]; then
+                        if [[ "$tests" == "PASSING" || "$tests" == "NOT_RUN" ]]; then
+                            should_mark=true
+                        fi
+                    fi
+
+                    if [[ "$should_mark" == "true" ]]; then
                         mark_story_complete "$project_dir/prd.json" "$current_story_id"
-                        log "SUCCESS" "✓ Marked story [$current_story_id] as complete"
+                        local reason="status=$status"
+                        log "SUCCESS" "✓ Marked story [$current_story_id] as complete ($reason)"
+                    elif [[ "$VERBOSE" == "true" ]]; then
+                        log "DEBUG" "Story [$current_story_id] not marked (status=$status, tests=$tests)"
                     fi
                 fi
             fi
@@ -886,6 +914,128 @@ main_loop() {
     done
     
     log "INFO" "Ralph loop finished"
+}
+
+# Stop a running project
+stop_project() {
+    local project_name=$1
+    local session_name="ralph-$project_name"
+    local stopped=false
+
+    echo ""
+    echo "Stopping project: $project_name"
+
+    # Try tmux session first
+    if command -v tmux &>/dev/null; then
+        if tmux list-sessions 2>/dev/null | grep -q "^$session_name"; then
+            tmux kill-session -t "$session_name" 2>/dev/null
+            echo "  ✓ Killed tmux session: $session_name"
+            stopped=true
+        fi
+    fi
+
+    # Kill any start.sh processes for this project
+    if pkill -f "start.sh.*$project_name" 2>/dev/null; then
+        echo "  ✓ Killed start.sh processes"
+        stopped=true
+    fi
+
+    # Kill any claude processes for this project
+    if pkill -f "claude.*$project_name" 2>/dev/null; then
+        echo "  ✓ Killed claude processes"
+        stopped=true
+    fi
+
+    if [[ "$stopped" == "true" ]]; then
+        echo ""
+        log "SUCCESS" "✓ Stopped project: $project_name"
+    else
+        echo ""
+        log "WARN" "No running processes found for: $project_name"
+    fi
+}
+
+# Setup verification (doctor)
+doctor() {
+    local all_good=true
+    local errors=()
+
+    echo ""
+    echo "═══════════════════════════════════════════════════════════"
+    echo "  Ralph Setup Verification"
+    echo "═══════════════════════════════════════════════════════════"
+    echo ""
+    echo "Checking dependencies..."
+    echo ""
+
+    # Check required commands
+    local required_cmds=("jq" "claude")
+    local optional_cmds=("tmux" "gh" "uv" "timeout" "gtimeout")
+
+    for cmd in "${required_cmds[@]}"; do
+        if command -v "$cmd" &>/dev/null; then
+            local version=$($cmd --version 2>/dev/null | head -1 || echo "ok")
+            echo "  ✓ $cmd${version:+ ($version)}"
+        else
+            echo "  ✗ $cmd - REQUIRED but not found"
+            errors+=("Install $cmd")
+            all_good=false
+        fi
+    done
+
+    for cmd in "${optional_cmds[@]}"; do
+        if [[ "$cmd" == "timeout" ]]; then
+            if command -v gtimeout &>/dev/null || command -v timeout &>/dev/null; then
+                echo "  ✓ $cmd (or gtimeout)"
+            else
+                echo "  ⚠ $cmd - Recommended (install coreutils on macOS)"
+            fi
+        elif command -v "$cmd" &>/dev/null; then
+            echo "  ✓ $cmd"
+        else
+            echo "  ⚠ $cmd - Optional but recommended"
+        fi
+    done
+
+    echo ""
+
+    # Check git
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        local branch=$(git branch --show-current 2>/dev/null || echo "unknown")
+        echo "  ✓ git repository (branch: $branch)"
+    else
+        echo "  ✗ not a git repository"
+        errors+=("Initialize git repository")
+        all_good=false
+    fi
+
+    # Check projects directory
+    if [[ -d "$SCRIPT_DIR/projects" ]]; then
+        local count=$(find "$SCRIPT_DIR/projects" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
+        echo "  ✓ projects directory ($count projects)"
+    else
+        echo "  ⚠ projects directory not found (will be created on first use)"
+    fi
+
+    echo ""
+    echo "═══════════════════════════════════════════════════════════"
+
+    if [[ "$all_good" == "true" ]]; then
+        log "SUCCESS" "✓ All required dependencies installed!"
+        echo ""
+        echo "You're ready to run:"
+        echo "  ./start.sh <project-name> --verbose"
+        return 0
+    else
+        log "ERROR" "✗ Some required dependencies are missing"
+        echo ""
+        echo "Fixes needed:"
+        for err in "${errors[@]}"; do
+            echo "  • $err"
+        done
+        echo ""
+        return 1
+    fi
 }
 
 # Show project status
@@ -966,6 +1116,14 @@ while [[ $# -gt 0 ]]; do
             ACTION="status"
             shift
             ;;
+        --stop)
+            ACTION="stop"
+            shift
+            ;;
+        --doctor|--check)
+            ACTION="doctor"
+            shift
+            ;;
         -r|--reset)
             ACTION="reset"
             shift
@@ -979,7 +1137,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate project name
+# Handle doctor (no project required)
+if [[ "$ACTION" == "doctor" ]]; then
+    doctor
+    exit $?
+fi
+
+# Validate project name for actions that need it
 if [[ -z "$PROJECT_NAME" ]]; then
     log "ERROR" "Project name is required"
     show_help
@@ -988,20 +1152,26 @@ fi
 
 PROJECT_DIR="$SCRIPT_DIR/projects/$PROJECT_NAME"
 
-# Check if project exists
-if [[ ! -d "$PROJECT_DIR" ]]; then
-    log "ERROR" "Project '$PROJECT_NAME' does not exist"
-    log "INFO" "Create it first with: ./ralph/new.sh $PROJECT_NAME"
-    exit 1
-fi
+# For stop action, project may not exist (just kill processes)
+if [[ "$ACTION" != "stop" ]]; then
+    # Check if project exists
+    if [[ ! -d "$PROJECT_DIR" ]]; then
+        log "ERROR" "Project '$PROJECT_NAME' does not exist"
+        log "INFO" "Create it first with: ./ralph/new.sh $PROJECT_NAME"
+        exit 1
+    fi
 
-# Check dependencies
-check_dependencies || exit 1
+    # Check dependencies
+    check_dependencies || exit 1
+fi
 
 # Execute action
 case "$ACTION" in
     "status")
         show_status "$PROJECT_NAME"
+        ;;
+    "stop")
+        stop_project "$PROJECT_NAME"
         ;;
     "reset")
         reset_circuit_breaker "$PROJECT_DIR" "Manual reset via CLI"
