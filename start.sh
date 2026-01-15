@@ -349,38 +349,70 @@ $branch_warning
 
 2. **Implement ONLY that single user story** - do not scope creep
 
-3. **After implementation, verify your work:**
+3. **Use Subagents for Complex Tasks:**
+
+   For stories involving any of the following, use the Task tool with specialized subagents:
+
+   **When to use the EXPLORE subagent:**
+   - You need to find files by pattern (e.g., "all API route files")
+   - You need to understand how a feature is implemented across the codebase
+   - You're unsure where to start or what files to modify
+   - You need to trace code flow or dependencies
+
+   **When to use the PLAN subagent:**
+   - The story involves multiple files or components
+   - There are multiple valid implementation approaches
+   - Architectural decisions need to be made
+   - The requirements are unclear and need design
+
+   **When to use the code-simplifier subagent:**
+   - After implementing a complex feature, refactor for clarity
+   - The code you wrote is getting long or complex
+   - You want to ensure maintainability before committing
+
+   **Subagent workflow:**
+   - Use Task tool with appropriate subagent_type (Explore, Plan, code-simplifier)
+   - Provide clear, specific prompts to the subagent
+   - Review the subagent's findings/recommendations
+   - Implement the changes yourself (subagents advise, you execute)
+
+   Example:
+   - For a new API endpoint: First use Explore to find existing API patterns, then implement
+   - For a complex feature: Use Plan to design the approach, then implement
+   - After implementation: Use code-simplifier to refine the code
+
+4. **After implementation, verify your work:**
    - Run: \`turbo check-types\` to verify no type errors
    - Run: \`turbo test\` to verify tests pass
 
-4. **If checks pass, commit and push your work:**
+5. **If checks pass, commit and push your work:**
    - Use a descriptive commit message
    - Format: \`feat: [ID] - [Title]\`
    - Example: \`git commit -m "feat: 1.1 - Create subscription database schema"\`
    - **After committing, push to the current branch:** \`git push origin HEAD\`
    - ⛔ ONLY push to the designated branch (\`$branch_name\`) - NEVER push to main, master, or any other branch
 
-5. **Update AGENTS.md if you discover reusable patterns:**
+6. **Update AGENTS.md if you discover reusable patterns:**
    - Add learnings to AGENTS.md files in directories where you modified files
    - Good additions: "When modifying X, also update Y", "This module uses pattern Z"
    - Don't add: story-specific details, temporary notes
 
-6. **Update prd.json:** Set \`passes: true\` for the completed user story
+7. **Update prd.json:** Set \`passes: true\` for the completed user story
 
-7. **Update progress.txt with what you implemented**
+8. **Update progress.txt with what you implemented**
     - Task completed and PRD item reference
     - Key decisions made and reasoning
     - Files changed
     - Any blockers or notes for next iteration
     Keep entries concise. Sacrifice grammar for the sake of concision. This file helps future iterations skip exploration.
 
-7. **Report your status using the RALPH_STATUS block** (see PROMPT.md for format)
+9. **Report your status using the RALPH_STATUS block** (see PROMPT.md for format)
 
-8. **If ALL user stories now have \`passes: true\`:**
+10. **If ALL user stories now have \`passes: true\`:**
    - Reply with: $COMPLETE_TOKEN
    - This signals that the entire project is complete
 
-9. **STOP IMMEDIATELY after completing ONE story**
+11. **STOP IMMEDIATELY after completing ONE story**
    - After updating prd.json and reporting status, YOU MUST STOP
    - Do NOT start working on another story
    - Do NOT continue to the next task
